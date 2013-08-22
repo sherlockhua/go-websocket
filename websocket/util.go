@@ -19,12 +19,13 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"io"
+	"net/http"
 	"strings"
 )
 
 // tokenListContainsValue returns true if the 1#token header with the given
 // name contains token.
-func tokenListContainsValue(header map[string][]string, name string, value string) bool {
+func tokenListContainsValue(header http.Header, name string, value string) bool {
 	for _, v := range header[name] {
 		for _, s := range strings.Split(v, ",") {
 			if strings.EqualFold(value, strings.TrimSpace(s)) {

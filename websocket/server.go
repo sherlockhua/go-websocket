@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"errors"
 	"net"
+	"net/http"
 )
 
 // HandeshakeError describes an error with the handshake from the peer.
@@ -27,9 +28,7 @@ type HandshakeError struct {
 
 func (e HandshakeError) Error() string { return e.Err }
 
-// Upgrade upgrades the HTTP server connection to the WebSocket protocol. The
-// resp argument is any object that supports the http.Hijack interface
-// (http.ResponseWriter, Indigo web.Responder).
+// Upgrade upgrades the HTTP server connection to the WebSocket protocol.
 //
 // Upgrade returns a HandshakeError if the request is not a WebSocket
 // handshake. Applications should handle errors of this type by replying to the
@@ -45,7 +44,7 @@ func (e HandshakeError) Error() string { return e.Err }
 //
 // Use the responseHeader to specify cookies (Set-Cookie) and the subprotocol
 // (Sec-WebSocket-Protocol).
-func Upgrade(resp interface{}, requestHeader, responseHeader map[string][]string, readBufSize, writeBufSize int) (*Conn, error) {
+func Upgrade(resp http.ResponseWriter, requestHeader, responseHeader http.Header, readBufSize, writeBufSize int) (*Conn, error) {
 
 	if values := requestHeader["Sec-Websocket-Version"]; len(values) == 0 || values[0] != "13" {
 		return nil, HandshakeError{"websocket: version != 13"}
@@ -72,25 +71,17 @@ func Upgrade(resp interface{}, requestHeader, responseHeader map[string][]string
 		err     error
 	)
 
-	if h, ok := resp.(interface {
-		Hijack() (net.Conn, *bufio.Reader, error)
-	}); ok {
-		// Indigo
-		netConn, br, err = h.Hijack()
-	} else if h, ok := resp.(interface {
-		Hijack() (net.Conn, *bufio.ReadWriter, error)
-	}); ok {
-		// Standard HTTP package.
-		var rw *bufio.ReadWriter
-		netConn, rw, err = h.Hijack()
-		br = rw.Reader
-	} else {
-		return nil, errors.New("websocket: resp does not support Hijack")
+	h, ok := resp.(http.Hijacker)
+	if !ok {
+		return nil, errors.New("websocket: response does not implement http.Hijacker")
 	}
+	var rw *bufio.ReadWriter
+	netConn, rw, err = h.Hijack()
+	br = rw.Reader
 
 	if br.Buffered() > 0 {
 		netConn.Close()
-		return nil, errors.New("websocket: client sent data before handshake complete")
+		return nil, errors.New("websocket: client sent data before handshake is complete.")
 	}
 
 	c := newConn(netConn, true, readBufSize, writeBufSize)
