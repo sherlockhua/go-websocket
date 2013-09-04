@@ -23,7 +23,7 @@ import (
 )
 
 // NewClient creates a new client connection using the given net connection.
-// The URL u specifies the host and request URI. Use requestHeader to sepcify
+// The URL u specifies the host and request URI. Use requestHeader to specify
 // the origin (Origin), subprotocols (Set-WebSocket-Protocol) and cookies
 // (Cookie). Use the response.Header to get the selected subprotocol
 // (Sec-WebSocket-Protocol) and cookies (Set-Cookie).
