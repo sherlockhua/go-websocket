@@ -9,16 +9,16 @@ import (
 )
 
 const (
-	// Time allowed to write a message to the client.
+	// Time allowed to write a message to the peer.
 	writeWait = 10 * time.Second
 
-	// Time allowed to read the next message from the client.
-	readWait = 60 * time.Second
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 60 * time.Second
 
-	// Send pings to client with this period. Must be less than readWait.
-	pingPeriod = (readWait * 9) / 10
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 9) / 10
 
-	// Maximum message size allowed from client.
+	// Maximum message size allowed from peer.
 	maxMessageSize = 512
 )
 
@@ -38,7 +38,7 @@ func (c *connection) readPump() {
 		c.ws.Close()
 	}()
 	c.ws.SetReadLimit(maxMessageSize)
-	c.ws.SetReadDeadline(time.Now().Add(readWait))
+	c.ws.SetReadDeadline(time.Now().Add(pongWait))
 	for {
 		op, r, err := c.ws.NextReader()
 		if err != nil {
@@ -46,7 +46,7 @@ func (c *connection) readPump() {
 		}
 		switch op {
 		case websocket.OpPong:
-			c.ws.SetReadDeadline(time.Now().Add(readWait))
+			c.ws.SetReadDeadline(time.Now().Add(pongWait))
 		case websocket.OpText:
 			message, err := ioutil.ReadAll(r)
 			if err != nil {
@@ -88,7 +88,7 @@ func (c *connection) writePump() {
 	}
 }
 
-// serverWs handles webocket requests from the client.
+// serverWs handles webocket requests from the peer.
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", 405)

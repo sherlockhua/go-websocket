@@ -62,7 +62,7 @@ func TestFraming(t *testing.T) {
 
 			for _, n := range frameSizes {
 				for _, iocopy := range []bool{true, false} {
-					name := fmt.Sprintf("s:%b, r:%s, n:%d c:%s", isServer, chunker.name, n, iocopy)
+					name := fmt.Sprintf("s:%v, r:%s, n:%d c:%v", isServer, chunker.name, n, iocopy)
 
 					w, err := wc.NextWriter(OpText)
 					if err != nil {
