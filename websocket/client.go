@@ -22,11 +22,17 @@ import (
 	"strings"
 )
 
+var ErrBadHandshake = errors.New("websocket: bad handshake")
+
 // NewClient creates a new client connection using the given net connection.
 // The URL u specifies the host and request URI. Use requestHeader to specify
 // the origin (Origin), subprotocols (Set-WebSocket-Protocol) and cookies
 // (Cookie). Use the response.Header to get the selected subprotocol
 // (Sec-WebSocket-Protocol) and cookies (Set-Cookie).
+//
+// If the WebSocket handshake fails, ErrBadHandshake is returned along with a
+// non-nil *http.Response so that callers can handle redirects, authentication,
+// etc.
 func NewClient(netConn net.Conn, u *url.URL, requestHeader http.Header, readBufSize, writeBufSize int) (c *Conn, response *http.Response, err error) {
 	challengeKey, err := generateChallengeKey()
 	if err != nil {
@@ -65,7 +71,7 @@ func NewClient(netConn net.Conn, u *url.URL, requestHeader http.Header, readBufS
 		!strings.EqualFold(resp.Header.Get("Upgrade"), "websocket") ||
 		!strings.EqualFold(resp.Header.Get("Connection"), "upgrade") ||
 		resp.Header.Get("Sec-Websocket-Accept") != acceptKey {
-		return nil, nil, errors.New("websocket: bad handshake")
+		return nil, resp, ErrBadHandshake
 	}
 	return c, resp, nil
 }
