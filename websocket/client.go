@@ -22,6 +22,8 @@ import (
 	"strings"
 )
 
+// ErrBadHandshake is returned when the server response to opening handshake is
+// invalid.
 var ErrBadHandshake = errors.New("websocket: bad handshake")
 
 // NewClient creates a new client connection using the given net connection.

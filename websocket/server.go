@@ -21,7 +21,7 @@ import (
 	"net/http"
 )
 
-// HandeshakeError describes an error with the handshake from the peer.
+// HandshakeError describes an error with the handshake from the peer.
 type HandshakeError struct {
 	Err string
 }
@@ -59,11 +59,11 @@ func Upgrade(resp http.ResponseWriter, requestHeader, responseHeader http.Header
 	}
 
 	var challengeKey string
-	if values := requestHeader["Sec-Websocket-Key"]; len(values) == 0 || values[0] == "" {
+	values := requestHeader["Sec-Websocket-Key"]
+	if len(values) == 0 || values[0] == "" {
 		return nil, HandshakeError{"websocket: key missing or blank"}
-	} else {
-		challengeKey = values[0]
 	}
+	challengeKey = values[0]
 
 	var (
 		netConn net.Conn
@@ -81,7 +81,7 @@ func Upgrade(resp http.ResponseWriter, requestHeader, responseHeader http.Header
 
 	if br.Buffered() > 0 {
 		netConn.Close()
-		return nil, errors.New("websocket: client sent data before handshake is complete.")
+		return nil, errors.New("websocket: client sent data before handshake is complete")
 	}
 
 	c := newConn(netConn, true, readBufSize, writeBufSize)

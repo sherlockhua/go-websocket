@@ -629,16 +629,15 @@ func (c *Conn) advanceFrame() (int, error) {
 		c.WriteControl(OpClose, []byte{}, time.Now().Add(writeWait))
 		if len(payload) < 2 {
 			return -1, io.EOF
-		} else {
-			closeCode := binary.BigEndian.Uint16(payload)
-			switch closeCode {
-			case CloseNormalClosure, CloseGoingAway:
-				return -1, io.EOF
-			default:
-				return -1, errors.New("websocket: close " +
-					strconv.Itoa(int(closeCode)) + " " +
-					string(payload[2:]))
-			}
+		}
+		closeCode := binary.BigEndian.Uint16(payload)
+		switch closeCode {
+		case CloseNormalClosure, CloseGoingAway:
+			return -1, io.EOF
+		default:
+			return -1, errors.New("websocket: close " +
+				strconv.Itoa(int(closeCode)) + " " +
+				string(payload[2:]))
 		}
 	}
 

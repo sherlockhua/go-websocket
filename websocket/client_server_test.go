@@ -42,7 +42,7 @@ func (t wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		t.Logf("bad origin: %s", r.Header.Get("Origin"))
 		return
 	}
-	ws, err := websocket.Upgrade(w, r.Header, http.Header{"Set-Cookie": {"sessionId=1234"}}, 1024, 1024)
+	ws, err := websocket.Upgrade(w, r.Header, http.Header{"Set-Cookie": {"sessionID=1234"}}, 1024, 1024)
 	if _, ok := err.(websocket.HandshakeError); ok {
 		t.Logf("bad handshake: %v", err)
 		http.Error(w, "Not a websocket handshake", 400)
@@ -93,13 +93,13 @@ func TestClientServer(t *testing.T) {
 	}
 	defer ws.Close()
 
-	var sessionId string
+	var sessionID string
 	for _, c := range resp.Cookies() {
-		if c.Name == "sessionId" {
-			sessionId = c.Value
+		if c.Name == "sessionID" {
+			sessionID = c.Value
 		}
 	}
-	if sessionId != "1234" {
+	if sessionID != "1234" {
 		t.Error("Set-Cookie not received from the server.")
 	}
 
