@@ -60,7 +60,7 @@ func (t wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		if op == websocket.OpPong {
+		if op == websocket.PongMessage {
 			continue
 		}
 		w, err := ws.NextWriter(op)
@@ -103,7 +103,7 @@ func TestClientServer(t *testing.T) {
 		t.Error("Set-Cookie not received from the server.")
 	}
 
-	w, _ := ws.NextWriter(websocket.OpText)
+	w, _ := ws.NextWriter(websocket.TextMessage)
 	io.WriteString(w, "HELLO")
 	w.Close()
 	ws.SetReadDeadline(time.Now().Add(1 * time.Second))
@@ -111,8 +111,8 @@ func TestClientServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NextReader: %v", err)
 	}
-	if op != websocket.OpText {
-		t.Fatalf("op=%d, want %d", op, websocket.OpText)
+	if op != websocket.TextMessage {
+		t.Fatalf("op=%d, want %d", op, websocket.TextMessage)
 	}
 	b, err := ioutil.ReadAll(r)
 	if err != nil {

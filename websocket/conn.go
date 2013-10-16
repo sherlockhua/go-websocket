@@ -12,54 +12,6 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-// Package websocket implements the WebSocket protocol defined in RFC 6455.
-//
-// Overview
-//
-// The Conn type represents a WebSocket connection. WebSocket messages are
-// represented by the io.Reader interface when receiving a message and by the
-// io.WriteCloser interface when sending a message. An application receives a
-// message by calling the Conn.NextReader method and reading the returned
-// io.Reader to EOF. An application sends a message by calling the
-// Conn.NextWriter method and writing the message to the returned
-// io.WriteCloser. The application terminates the message by closing the
-// io.WriteCloser.
-//
-// The following example shows how to use NextReader and NextWriter to echo
-// messages:
-//
-//  for {
-//      op, r, err := conn.NextReader()
-//      if err != nil {
-//          return
-//      }
-//      if op != websocket.OpBinary && op != websocket.OpText {
-//          // Ignore if not a data message.
-//          continue
-//      }
-//      w, err := conn.NextWriter(op)
-//      if err != nil {
-//          return err
-//      }
-//      if _, err := io.Copy(w, r); err != nil {
-//          return err
-//      }
-//      if err := w.Close(); err != nil {
-//          return err
-//      }
-//  }
-//
-// Concurrency
-//
-// A Conn supports a single concurrent caller to the write methods (NextWriter,
-// SetWriteDeadline, WriteMessage) and a single concurrent caller to the read
-// methods (NextReader, SetReadDeadline). The Close and WriteControl methods
-// can be called concurrently with all other methods.
-//
-// Text
-//
-// Text messages in the WebSocket protocol are transmitted as UTF-8. It is the
-// application's responsibility to ensure that text messages are valid UTF-8.
 package websocket
 
 import (
@@ -91,14 +43,37 @@ const (
 	CloseTLSHandshake            = 1015
 )
 
-// Opcodes defined in RFC 6455, section 11.8.
+// The message types are defined in RFC 6455, section 11.8.
 const (
-	OpContinuation = 0
-	OpText         = 1
-	OpBinary       = 2
-	OpClose        = 8
-	OpPing         = 9
-	OpPong         = 10
+	// TextMessage denotes a text message. The text message payload is
+	// interpreted as UTF-8 encoded text data.
+	TextMessage = 1
+
+	// BinaryMessage denotes a binary data message.
+	BinaryMessage = 2
+
+	// CloseMessage denotes a close control message. The optional message
+	// payload contains a numeric code and text. Use the FormatCloseMessage
+	// function to format a close message payload.
+	CloseMessage = 8
+
+	// PingMessage denotes a ping control message. The optional message payload
+	// is UTF-8 encoded text.
+	PingMessage = 9
+
+	// PongMessage denotes a ping control message. The optional message payload
+	// is UTF-8 encoded text.
+	PongMessage = 10
+)
+
+const continuationFrame = 0
+
+const (
+	OpText   = TextMessage
+	OpBinary = BinaryMessage
+	OpClose  = CloseMessage
+	OpPing   = PingMessage
+	OpPong   = PongMessage
 )
 
 var (
@@ -107,7 +82,7 @@ var (
 )
 
 var (
-	errBadWriteOpCode      = errors.New("websocket: bad write opcode")
+	errBadWriteOpCode      = errors.New("websocket: bad write message type")
 	errWriteTimeout        = errors.New("websocket: write timeout")
 	errWriteClosed         = errors.New("websocket: write closed")
 	errInvalidControlFrame = errors.New("websocket: invalid control frame")
@@ -203,7 +178,7 @@ func (c *Conn) write(opCode int, deadline time.Time, bufs ...[]byte) error {
 
 	if c.closeSent {
 		return ErrCloseSent
-	} else if opCode == OpClose {
+	} else if opCode == CloseMessage {
 		c.closeSent = true
 	}
 
@@ -224,16 +199,16 @@ func (c *Conn) write(opCode int, deadline time.Time, bufs ...[]byte) error {
 }
 
 // WriteControl writes a control message with the given deadline. The allowed
-// opCodes are OpClose, OpPing and OpPong.
-func (c *Conn) WriteControl(opCode int, data []byte, deadline time.Time) error {
-	if opCode != OpClose && opCode != OpPing && opCode != OpPong {
+// opCodes are CloseMessage, PingMessage and PongMessage.
+func (c *Conn) WriteControl(messageType int, data []byte, deadline time.Time) error {
+	if messageType != CloseMessage && messageType != PingMessage && messageType != PongMessage {
 		return errBadWriteOpCode
 	}
 	if len(data) > maxControlFramePayloadSize {
 		return errInvalidControlFrame
 	}
 
-	b0 := byte(opCode) | finalBit
+	b0 := byte(messageType) | finalBit
 	b1 := byte(len(data))
 	if !c.isServer {
 		b1 |= maskBit
@@ -270,7 +245,7 @@ func (c *Conn) WriteControl(opCode int, data []byte, deadline time.Time) error {
 
 	if c.closeSent {
 		return ErrCloseSent
-	} else if opCode == OpClose {
+	} else if messageType == CloseMessage {
 		c.closeSent = true
 	}
 
@@ -283,15 +258,15 @@ func (c *Conn) WriteControl(opCode int, data []byte, deadline time.Time) error {
 }
 
 // NextWriter returns a writer for the next message to send. The allowed
-// opCodes are OpText, OpBinary, OpClose and OpPing. The writer's Close method
-// flushes the complete message to the network.
+// message types are TextMessage, BinaryMessage, CloseMessage and PingMessage.
+// The writer's Close method flushes the complete message to the network.
 //
 // There can be at most one open writer on a connection. NextWriter closes the
 // previous writer if the application has not already done so.
 //
 // The NextWriter method and the writers returned from the method cannot be
 // accessed by more than one goroutine at a time.
-func (c *Conn) NextWriter(opCode int) (io.WriteCloser, error) {
+func (c *Conn) NextWriter(messageType int) (io.WriteCloser, error) {
 	if c.writeErr != nil {
 		return nil, c.writeErr
 	}
@@ -302,11 +277,11 @@ func (c *Conn) NextWriter(opCode int) (io.WriteCloser, error) {
 		}
 	}
 
-	if opCode != OpText && opCode != OpBinary && opCode != OpClose && opCode != OpPing {
+	if messageType != TextMessage && messageType != BinaryMessage && messageType != CloseMessage && messageType != PingMessage {
 		return nil, errBadWriteOpCode
 	}
 
-	c.writeOpCode = opCode
+	c.writeOpCode = messageType
 	return messageWriter{c, c.writeSeq}, nil
 }
 
@@ -314,7 +289,7 @@ func (c *Conn) flushFrame(final bool, extra []byte) error {
 	length := c.writePos - maxFrameHeaderSize + len(extra)
 
 	// Check for invalid control frames.
-	if (c.writeOpCode == OpClose || c.writeOpCode == OpPing) &&
+	if (c.writeOpCode == CloseMessage || c.writeOpCode == PingMessage) &&
 		(!final || length > maxControlFramePayloadSize) {
 		c.writeSeq += 1
 		c.writeOpCode = -1
@@ -369,7 +344,7 @@ func (c *Conn) flushFrame(final bool, extra []byte) error {
 
 	// Setup for next frame.
 	c.writePos = maxFrameHeaderSize
-	c.writeOpCode = OpContinuation
+	c.writeOpCode = continuationFrame
 	if final {
 		c.writeSeq += 1
 		c.writeOpCode = -1
@@ -490,8 +465,8 @@ func (w messageWriter) Close() error {
 
 // WriteMessage is a helper method for getting a writer using NextWriter,
 // writing the message and closing the writer.
-func (c *Conn) WriteMessage(opCode int, data []byte) error {
-	wr, err := c.NextWriter(opCode)
+func (c *Conn) WriteMessage(messageType int, data []byte) error {
+	wr, err := c.NextWriter(messageType)
 	if err != nil {
 		return err
 	}
@@ -547,19 +522,19 @@ func (c *Conn) advanceFrame() (int, error) {
 	}
 
 	switch opCode {
-	case OpClose, OpPing, OpPong:
+	case CloseMessage, PingMessage, PongMessage:
 		if c.readRemaining > maxControlFramePayloadSize {
 			return -1, c.handleProtocolError("control frame length > 125")
 		}
 		if !final {
 			return -1, c.handleProtocolError("control frame not final")
 		}
-	case OpText, OpBinary:
+	case TextMessage, BinaryMessage:
 		if !c.readFinal {
 			return -1, c.handleProtocolError("message start before final message frame")
 		}
 		c.readFinal = final
-	case OpContinuation:
+	case continuationFrame:
 		if c.readFinal {
 			return -1, c.handleProtocolError("continuation after final message frame")
 		}
@@ -598,11 +573,11 @@ func (c *Conn) advanceFrame() (int, error) {
 
 	// 5. For text and binary messages, enforce read limit and return.
 
-	if opCode == OpContinuation || opCode == OpText || opCode == OpBinary {
+	if opCode == continuationFrame || opCode == TextMessage || opCode == BinaryMessage {
 
 		c.readLength += c.readRemaining
 		if c.readLimit > 0 && c.readLength > c.readLimit {
-			c.WriteControl(OpClose, FormatCloseMessage(CloseMessageTooBig, ""), time.Now().Add(writeWait))
+			c.WriteControl(CloseMessage, FormatCloseMessage(CloseMessageTooBig, ""), time.Now().Add(writeWait))
 			return -1, ErrReadLimit
 		}
 
@@ -621,12 +596,12 @@ func (c *Conn) advanceFrame() (int, error) {
 	// 7. Process control frame payload.
 
 	switch opCode {
-	case OpPong:
+	case PongMessage:
 		c.savedPong = payload
-	case OpPing:
-		c.WriteControl(OpPong, payload, time.Now().Add(writeWait))
-	case OpClose:
-		c.WriteControl(OpClose, []byte{}, time.Now().Add(writeWait))
+	case PingMessage:
+		c.WriteControl(PongMessage, payload, time.Now().Add(writeWait))
+	case CloseMessage:
+		c.WriteControl(CloseMessage, []byte{}, time.Now().Add(writeWait))
 		if len(payload) < 2 {
 			return -1, io.EOF
 		}
@@ -645,7 +620,7 @@ func (c *Conn) advanceFrame() (int, error) {
 }
 
 func (c *Conn) handleProtocolError(message string) error {
-	c.WriteControl(OpClose, FormatCloseMessage(CloseProtocolError, message), time.Now().Add(writeWait))
+	c.WriteControl(CloseMessage, FormatCloseMessage(CloseProtocolError, message), time.Now().Add(writeWait))
 	return errors.New("websocket: " + message)
 }
 
@@ -667,16 +642,16 @@ func (c *Conn) read(buf []byte) error {
 }
 
 // NextReader returns the next message received from the peer. The returned
-// opCode is one of OpText, OpBinary or OpPong. The connection automatically
-// handles ping messages received from the peer. NextReader returns an error
-// upon receiving a close message from the peer.
+// messageType is one of TextMessage, BinaryMessage or PongMessage. The
+// connection automatically handles ping messages received from the peer.
+// NextReader returns an error upon receiving a close message from the peer.
 //
 // There can be at most one open reader on a connection. NextReader discards
 // the previous message if the application has not already consumed it.
 //
 // The NextReader method and the readers returned from the method cannot be
 // accessed by more than one goroutine at a time.
-func (c *Conn) NextReader() (opCode int, r io.Reader, err error) {
+func (c *Conn) NextReader() (messageType int, r io.Reader, err error) {
 
 	c.readSeq += 1
 	c.readLength = 0
@@ -684,20 +659,20 @@ func (c *Conn) NextReader() (opCode int, r io.Reader, err error) {
 	if c.savedPong != nil {
 		r := bytes.NewReader(c.savedPong)
 		c.savedPong = nil
-		return OpPong, r, nil
+		return PongMessage, r, nil
 	}
 
 	for c.readErr == nil {
 		var opCode int
 		opCode, c.readErr = c.advanceFrame()
 		switch opCode {
-		case OpText, OpBinary:
+		case TextMessage, BinaryMessage:
 			return opCode, messageReader{c, c.readSeq}, nil
-		case OpPong:
+		case PongMessage:
 			r := bytes.NewReader(c.savedPong)
 			c.savedPong = nil
-			return OpPong, r, nil
-		case OpContinuation:
+			return PongMessage, r, nil
+		case continuationFrame:
 			// do nothing
 		}
 	}
@@ -735,11 +710,23 @@ func (r messageReader) Read(b []byte) (n int, err error) {
 		var opCode int
 		opCode, r.c.readErr = r.c.advanceFrame()
 
-		if opCode == OpText || opCode == OpBinary {
+		if opCode == TextMessage || opCode == BinaryMessage {
 			r.c.readErr = errors.New("websocket: internal error, unexpected text or binary in Reader")
 		}
 	}
 	return 0, r.c.readErr
+}
+
+// ReadMessage is a helper method for getting a reader using NextReader and
+// reading from that reader to a buffer.
+func (c *Conn) ReadMessage() (messageType int, p []byte, err error) {
+	var r io.Reader
+	messageType, r, err = c.NextReader()
+	if err != nil {
+		return messageType, nil, err
+	}
+	p, err = ioutil.ReadAll(r)
+	return messageType, p, err
 }
 
 // SetReadDeadline sets the deadline for future calls to NextReader and the

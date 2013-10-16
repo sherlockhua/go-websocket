@@ -64,7 +64,7 @@ func TestFraming(t *testing.T) {
 				for _, iocopy := range []bool{true, false} {
 					name := fmt.Sprintf("s:%v, r:%s, n:%d c:%v", isServer, chunker.name, n, iocopy)
 
-					w, err := wc.NextWriter(OpText)
+					w, err := wc.NextWriter(TextMessage)
 					if err != nil {
 						t.Errorf("%s: wc.NextWriter() returned %v", name, err)
 						continue
@@ -88,7 +88,7 @@ func TestFraming(t *testing.T) {
 					}
 
 					opCode, r, err := rc.NextReader()
-					if err != nil || opCode != OpText {
+					if err != nil || opCode != TextMessage {
 						t.Errorf("%s: NextReader() returned %d, r, %v", name, opCode, err)
 						continue
 					}
@@ -126,25 +126,25 @@ func TestReadLimit(t *testing.T) {
 	rc.SetReadLimit(readLimit)
 
 	// Send message at the limit with interleaved pong.
-	w, _ := wc.NextWriter(OpBinary)
+	w, _ := wc.NextWriter(BinaryMessage)
 	w.Write(message[:readLimit-1])
-	wc.WriteControl(OpPong, []byte("this is a pong"), time.Now().Add(10*time.Second))
+	wc.WriteControl(PongMessage, []byte("this is a pong"), time.Now().Add(10*time.Second))
 	w.Write(message[:1])
 	w.Close()
 
 	// Send message larger than the limit.
-	wc.WriteMessage(OpBinary, message[:readLimit+1])
+	wc.WriteMessage(BinaryMessage, message[:readLimit+1])
 
 	op, _, err := rc.NextReader()
-	if op != OpBinary || err != nil {
+	if op != BinaryMessage || err != nil {
 		t.Fatalf("1: NextReader() returned %d, %v", op, err)
 	}
 	op, _, err = rc.NextReader()
-	if op != OpPong || err != nil {
+	if op != PongMessage || err != nil {
 		t.Fatalf("2: NextReader() returned %d, %v", op, err)
 	}
 	op, r, err := rc.NextReader()
-	if op != OpBinary || err != nil {
+	if op != BinaryMessage || err != nil {
 		t.Fatalf("3: NextReader() returned %d, %v", op, err)
 	}
 	_, err = io.Copy(ioutil.Discard, r)

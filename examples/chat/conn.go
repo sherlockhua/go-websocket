@@ -40,14 +40,14 @@ func (c *connection) readPump() {
 	c.ws.SetReadLimit(maxMessageSize)
 	c.ws.SetReadDeadline(time.Now().Add(pongWait))
 	for {
-		op, r, err := c.ws.NextReader()
+		mt, r, err := c.ws.NextReader()
 		if err != nil {
 			break
 		}
-		switch op {
-		case websocket.OpPong:
+		switch mt {
+		case websocket.PingMessage:
 			c.ws.SetReadDeadline(time.Now().Add(pongWait))
-		case websocket.OpText:
+		case websocket.TextMessage:
 			message, err := ioutil.ReadAll(r)
 			if err != nil {
 				break
@@ -57,10 +57,10 @@ func (c *connection) readPump() {
 	}
 }
 
-// write writes a message with the given opCode and payload.
-func (c *connection) write(opCode int, payload []byte) error {
+// write writes a message with the given message type and payload.
+func (c *connection) write(mt int, payload []byte) error {
 	c.ws.SetWriteDeadline(time.Now().Add(writeWait))
-	return c.ws.WriteMessage(opCode, payload)
+	return c.ws.WriteMessage(mt, payload)
 }
 
 // writePump pumps messages from the hub to the websocket connection.
@@ -74,14 +74,14 @@ func (c *connection) writePump() {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
-				c.write(websocket.OpClose, []byte{})
+				c.write(websocket.CloseMessage, []byte{})
 				return
 			}
-			if err := c.write(websocket.OpText, message); err != nil {
+			if err := c.write(websocket.TextMessage, message); err != nil {
 				return
 			}
 		case <-ticker.C:
-			if err := c.write(websocket.OpPing, []byte{}); err != nil {
+			if err := c.write(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
 		}

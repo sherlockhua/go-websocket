@@ -20,10 +20,10 @@ import (
 	"flag"
 	"github.com/garyburd/go-websocket/websocket"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
+	"unicode/utf8"
 )
 
 // echoCopy echoes messages from the client using io.Copy.
@@ -98,7 +98,7 @@ func echoReadAll(w http.ResponseWriter, r *http.Request, writeMessage bool) {
 	}
 	defer conn.Close()
 	for {
-		op, r, err := conn.NextReader()
+		op, b, err := conn.ReadMessage()
 		if err != nil {
 			if err != io.EOF {
 				log.Println("NextReader:", err)
@@ -109,17 +109,12 @@ func echoReadAll(w http.ResponseWriter, r *http.Request, writeMessage bool) {
 			continue
 		}
 		if op == websocket.OpText {
-			r = &validator{r: r}
-		}
-		b, err := ioutil.ReadAll(r)
-		if err != nil {
-			if err == errInvalidUTF8 {
+			if !utf8.Valid(b) {
 				conn.WriteControl(websocket.OpClose,
 					websocket.FormatCloseMessage(websocket.CloseInvalidFramePayloadData, ""),
 					time.Time{})
+				log.Println("ReadAll: invalid utf8")
 			}
-			log.Println("ReadAll:", err)
-			return
 		}
 		if writeMessage {
 			err = conn.WriteMessage(op, b)
